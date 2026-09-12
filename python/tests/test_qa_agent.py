@@ -24,7 +24,10 @@ class TestExtractContexts:
         messages = [
             HumanMessage(content="test"),
             ToolMessage(
-                content='[{"rank":1,"score":0.95,"content":"test content","source":"test.pdf"}]',
+                content=(
+                    '{"contexts":[{"rank":1,"score":0.95,'
+                    '"content":"test content","source":"test.pdf"}]}'
+                ),
                 name="vector_search",
                 tool_call_id="call_1",
             ),
@@ -42,7 +45,10 @@ class TestExtractContexts:
         messages = [
             HumanMessage(content="test"),
             ToolMessage(
-                content='{"entity":"张三","relationships":[{"relation":"works_at","target":"腾讯"}]}',
+                content=(
+                    '{"contexts":[{"content":"张三 works_at 腾讯",'
+                    '"source":"knowledge_graph","score":0.8}]}'
+                ),
                 name="entity_lookup",
                 tool_call_id="call_1",
             ),
@@ -51,6 +57,18 @@ class TestExtractContexts:
         contexts = QAAgent._extract_contexts(messages)
         assert len(contexts) == 1
         assert contexts[0].retrieval_type == "graph"
+
+    def test_ignores_legacy_payload_without_contexts(self):
+        """旧版 entity_lookup 结果不再由解析器猜测为证据。"""
+        messages = [
+            ToolMessage(
+                content='{"entity":"张三","relationships":[{"relation":"works_at","target":"腾讯"}]}',
+                name="entity_lookup",
+                tool_call_id="call_1",
+            ),
+        ]
+
+        assert QAAgent._extract_contexts(messages) == []
 
     def test_does_not_treat_missing_entity_as_evidence(self):
         """entity 是查询条件，查无结果时不能伪造图谱引用。"""
@@ -98,10 +116,10 @@ class TestExtractContexts:
         shared_prefix = "x" * 500
         messages = [
             ToolMessage(
-                content=json.dumps([
+                content=json.dumps({"contexts": [
                     {"content": shared_prefix + "first", "source": "doc.md", "score": 0.8},
                     {"content": shared_prefix + "second", "source": "doc.md", "score": 0.9},
-                ]),
+                ]}),
                 name="vector_search",
                 tool_call_id="call_1",
             ),
@@ -140,7 +158,8 @@ class TestExtractContexts:
         data = json.loads(await entity_lookup.ainvoke({"entity_name": "张三"}))
 
         assert data["relationships"][0]["target"] == "腾讯"
-        assert data["contexts"] == []
+        assert data["contexts"][0]["source"] == "knowledge_graph"
+        assert data["contexts"][0]["retrieval_type"] == "graph"
         assert data["warnings"]
 
     @pytest.mark.asyncio
@@ -333,14 +352,14 @@ class TestParseAgentResult:
         messages = [
             HumanMessage(content="上一轮问题"),
             ToolMessage(
-                content='[{"content":"上一轮证据","source":"old.md","score":0.9}]',
+                content='{"contexts":[{"content":"上一轮证据","source":"old.md","score":0.9}]}',
                 name="vector_search",
                 tool_call_id="old-call",
             ),
             AIMessage(content="上一轮答案"),
             HumanMessage(content="这一轮问题"),
             ToolMessage(
-                content='[{"content":"这一轮证据","source":"new.md","score":0.8}]',
+                content='{"contexts":[{"content":"这一轮证据","source":"new.md","score":0.8}]}',
                 name="vector_search",
                 tool_call_id="new-call",
             ),
@@ -357,7 +376,7 @@ class TestParseAgentResult:
         messages = [
             HumanMessage(content="上一轮问题"),
             ToolMessage(
-                content='[{"content":"上一轮证据","source":"old.md","score":0.9}]',
+                content='{"contexts":[{"content":"上一轮证据","source":"old.md","score":0.9}]}',
                 name="vector_search",
                 tool_call_id="old-call",
             ),

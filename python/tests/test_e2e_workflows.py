@@ -143,11 +143,11 @@ async def test_qa_answer_entrypoint_meets_all_gold_contracts_deterministically()
         "如何提交报销申请？": _tool_turn(
             "如何提交报销申请？",
             "vector_search",
-            json.dumps([{
+            json.dumps({"contexts": [{
                 "content": "提交报销单后进入审批流程。",
                 "source": "expense-policy.md",
                 "score": 0.88,
-            }], ensure_ascii=False),
+            }]}, ensure_ascii=False),
             "提交报销单后等待审批。[来源: expense-policy.md]",
         ),
     }

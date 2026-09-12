@@ -62,7 +62,12 @@ def sample_messages():
             tool_calls=[{"name": "entity_lookup", "args": {"entity_name": "张三"}, "id": "call_1"}],
         ),
         ToolMessage(
-            content='{"entity": "张三", "relationships": [{"entity": "张三", "relation": "works_at", "target": "腾讯"}]}',
+            content=(
+                '{"entity":"张三","relationships":[{"entity":"张三",'
+                '"relation":"works_at","target":"腾讯"}],"contexts":['
+                '{"content":"张三 works_at 腾讯","source":"knowledge_graph",'
+                '"score":0.8,"retrieval_type":"graph"}]}'
+            ),
             name="entity_lookup",
             tool_call_id="call_1",
         ),

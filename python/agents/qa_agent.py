@@ -190,11 +190,11 @@ class QAAgent:
             不适合关系查询（如"A 和 B 什么关系"），那种问题请用 cypher_query 或 entity_lookup。
             """
             if not vector_store:
-                return json.dumps({"error": "向量库未连接"}, ensure_ascii=False)
+                return json.dumps({"error": "向量库未连接", "contexts": []}, ensure_ascii=False)
 
             results = await vector_store.search(query, top_k=top_k)
             if not results:
-                return json.dumps({"message": "未找到相关文档"}, ensure_ascii=False)
+                return json.dumps({"message": "未找到相关文档", "contexts": []}, ensure_ascii=False)
 
             formatted = []
             for i, (doc, score) in enumerate(results):
@@ -205,7 +205,7 @@ class QAAgent:
                     "source": doc.get("source", "unknown"),
                     "metadata": doc.get("metadata", {}),
                 })
-            return json.dumps(formatted, ensure_ascii=False, indent=2)
+            return json.dumps({"contexts": formatted}, ensure_ascii=False, indent=2)
 
         @tool
         @require_readonly_cypher
@@ -222,7 +222,7 @@ class QAAgent:
               MATCH path = shortestPath((a:Entity {name:'张三'})-[*..3]-(b:Entity {name:'李四'})) RETURN path LIMIT 1
             """
             if not knowledge_graph:
-                return json.dumps({"error": "知识图谱未连接"}, ensure_ascii=False)
+                return json.dumps({"error": "知识图谱未连接", "contexts": []}, ensure_ascii=False)
 
             try:
                 records = await asyncio.wait_for(
@@ -249,9 +249,10 @@ class QAAgent:
             except TimeoutError:
                 return json.dumps({
                     "error": f"图查询超时（超过 {CYPHER_QUERY_TIMEOUT_SECONDS} 秒）",
+                    "contexts": [],
                 }, ensure_ascii=False)
             except Exception as e:
-                return json.dumps({"error": str(e)}, ensure_ascii=False)
+                return json.dumps({"error": str(e), "contexts": []}, ensure_ascii=False)
 
         @tool
         @break_react_loop(2)
@@ -262,7 +263,7 @@ class QAAgent:
             适用于 "XXX 是什么"、"XXX 和谁有关" 等问题。
             """
             if not knowledge_graph:
-                return json.dumps({"error": "知识图谱未连接"}, ensure_ascii=False)
+                return json.dumps({"error": "知识图谱未连接", "contexts": []}, ensure_ascii=False)
 
             neighbors: list[Any] = []
             mentions: list[Any] = []
@@ -285,40 +286,45 @@ class QAAgent:
                     return json.dumps({
                         "error": "；".join(errors),
                         "entity": entity_name,
+                        "contexts": [],
                     }, ensure_ascii=False)
                 return json.dumps({
                     "message": f"未找到实体 '{entity_name}'",
                     "entity": entity_name,
+                    "contexts": [],
                 }, ensure_ascii=False)
 
-            source_contexts = [
+            contexts = [
                 {
-                    "chunk_id": m.get("chunk_id"),
-                    "content": (m.get("content") or "")[:300],
-                    "source": m.get("source"),
-                    "page": m.get("page"),
+                    "content": (mention.get("content") or "")[:300],
+                    "source": mention.get("source") or mention.get("chunk_id") or "knowledge_graph",
+                    "score": 0.85,
+                    "retrieval_type": "graph",
+                    "metadata": {
+                        "entity": entity_name,
+                        "chunk_id": mention.get("chunk_id"),
+                        "page": mention.get("page"),
+                    },
                 }
-                for m in mentions if m.get("content")
+                for mention in mentions if mention.get("content")
             ]
+            # 图谱中已有的关系也是可审计的查询结果。若没有原文溯源片段，直接将
+            # 关系写入同一 contexts 契约，而不是由结果解析器猜测旧版返回格式。
+            if not contexts:
+                contexts = [
+                    {
+                        "content": json.dumps(dict(neighbor), ensure_ascii=False, default=str),
+                        "source": "knowledge_graph",
+                        "score": 0.8,
+                        "retrieval_type": "graph",
+                        "metadata": {"entity": entity_name},
+                    }
+                    for neighbor in neighbors
+                ]
             response = {
                 "entity": entity_name,
                 "relationships": [dict(n) for n in neighbors],
-                # 原文片段喂给 LLM，支撑 [来源: chunk_id] 引用。
-                "source_contexts": source_contexts,
-                "contexts": [
-                    {
-                        "content": item["content"],
-                        "source": item["source"] or item["chunk_id"] or "knowledge_graph",
-                        "score": 0.85,
-                        "retrieval_type": "graph",
-                        "metadata": {
-                            "entity": entity_name,
-                            "chunk_id": item["chunk_id"],
-                            "page": item["page"],
-                        },
-                    }
-                    for item in source_contexts
-                ],
+                "contexts": contexts,
             }
             if errors:
                 response["warnings"] = errors
@@ -328,11 +334,11 @@ class QAAgent:
         async def list_tables(dummy: str = "") -> str:
             """列出所有已导入的 Excel/CSV 表格文件名。调用后根据文件名选择要查哪张表。"""
             if not table_store:
-                return json.dumps({"error": "表格存储未初始化"}, ensure_ascii=False)
+                return json.dumps({"error": "表格存储未初始化", "contexts": []}, ensure_ascii=False)
             tables = table_store.list_tables()
             if not tables:
-                return "暂无已导入的表格"
-            return json.dumps(tables, ensure_ascii=False, indent=2)
+                return json.dumps({"message": "暂无已导入的表格", "tables": [], "contexts": []}, ensure_ascii=False)
+            return json.dumps({"tables": tables, "contexts": []}, ensure_ascii=False, indent=2)
 
         @tool
         @break_react_loop(2)
@@ -344,7 +350,7 @@ class QAAgent:
             keyword: 要搜索的关键词，如 "平安银行"、"000001" 等
             """
             if not table_store:
-                return json.dumps({"error": "表格存储未初始化"}, ensure_ascii=False)
+                return json.dumps({"error": "表格存储未初始化", "contexts": []}, ensure_ascii=False)
             result = table_store.query(table_name, "search", keyword=keyword)
             # “0 行”结果只用于指导下一次检索，不能作为支持答案的高置信度证据。
             if "找到 0 行" in result:
@@ -367,7 +373,7 @@ class QAAgent:
             table_name: 表格文件名
             """
             if not table_store:
-                return json.dumps({"error": "表格存储未初始化"}, ensure_ascii=False)
+                return json.dumps({"error": "表格存储未初始化", "contexts": []}, ensure_ascii=False)
             result = table_store.query(table_name, "columns")
             return json.dumps({
                 # 表结构只用于让 Agent 选择下一步查询，不是回答问题的证据。
@@ -438,7 +444,7 @@ class QAAgent:
 
     @staticmethod
     def _extract_contexts(messages: list) -> list[RetrievedContext]:
-        """从 ToolMessage 中提取检索到的上下文"""
+        """只从统一的 ToolMessage ``contexts`` 字段提取可引用证据。"""
         contexts: list[RetrievedContext] = []
         seen: set[tuple[str, str]] = set()
 
@@ -480,47 +486,10 @@ class QAAgent:
 
             try:
                 data = json.loads(msg.content) if isinstance(msg.content, str) else msg.content
-                if isinstance(data, list):
-                    for item in data:
-                        if isinstance(item, dict):
-                            append_context(item, retrieval_type, tool_name)
-                elif isinstance(data, dict):
+                if isinstance(data, dict):
                     for item in data.get("contexts", []):
                         if isinstance(item, dict):
                             append_context(item, retrieval_type, tool_name)
-                    # 兼容早期 entity_lookup 的 source_contexts 输出。
-                    for item in data.get("source_contexts", []):
-                        if isinstance(item, dict):
-                            append_context(
-                                {
-                                    "content": item.get("content", ""),
-                                    "source": item.get("chunk_id") or "knowledge_graph",
-                                    "score": 0.85,
-                                    "retrieval_type": "graph",
-                                    "metadata": {"chunk_id": item.get("chunk_id")},
-                                },
-                                "graph",
-                                "knowledge_graph",
-                            )
-                    # 兼容旧版 entity_lookup：只有查询到实际关系时，才将关系记录
-                    # 作为图谱证据。entity 字段本身只是查询条件；特别是“未找到实体”
-                    # 的响应绝不能生成引用或抬高置信度。
-                    if (
-                        data.get("entity")
-                        and data.get("relationships")
-                        and not data.get("contexts")
-                        and not data.get("source_contexts")
-                    ):
-                        append_context(
-                            {
-                                "content": json.dumps(data, ensure_ascii=False),
-                                "source": "knowledge_graph",
-                                "score": 0.8,
-                                "retrieval_type": "graph",
-                            },
-                            "graph",
-                            "knowledge_graph",
-                        )
             except (json.JSONDecodeError, TypeError, AttributeError):
                 pass
 
