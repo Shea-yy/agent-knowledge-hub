@@ -1,0 +1,28 @@
+# Secrets and machine-specific settings must never be sent to Docker build context.
+.env
+.env.*
+
+# Mutable runtime data and generated output.
+uploads/
+table_data/
+.pytest_cache/
+.tiktoken_cache/
+*.log
+api_stdout.log
+api_stderr.log
+
+# Local-only materials and source-control metadata.
+agents/*.md
+test_docs/
+tests/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.git/
+.github/
+.vscode/
+.idea/
+
+# Local launchers and one-off development assets.
+start.bat
+gen_mixed_pdf.py

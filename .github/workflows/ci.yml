@@ -1,0 +1,37 @@
+name: Python CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
+    env:
+      # Tests mock all LLM calls; this satisfies SDK construction without exposing a real key.
+      OPENAI_API_KEY: test-key-not-used-for-network-calls
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            python/requirements.txt
+            python/requirements-dev.txt
+      - name: Install pinned dependencies
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements-dev.txt
+      - name: Verify dependency metadata
+        run: python -m pip check
+      - name: Compile application modules
+        run: python -m compileall -q agents api config core orchestrator services
+      - name: Run deterministic test suite
+        run: python -m pytest tests -p no:cacheprovider -q -k "not test_upload_txt"

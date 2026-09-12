@@ -1,0 +1,8 @@
+# Keep source and documentation deterministic across Windows/macOS/Linux.
+* text=auto eol=lf
+*.bat text eol=crlf
+
+# Do not attempt text conversion for demo assets.
+*.pdf binary
+*.jpg binary
+*.jpeg binary

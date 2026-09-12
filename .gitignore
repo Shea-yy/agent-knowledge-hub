@@ -1,0 +1,32 @@
+# Secrets and machine-local configuration
+python/.env
+python/.env.*
+!python/.env.example
+
+# Runtime data and logs
+python/uploads/
+python/table_data/
+python/*.log
+python/logs/
+
+# Private study notes (kept locally, never published)
+python/agents/*.md
+**/CHANGES.md
+python/test_docs/
+python/gen_mixed_pdf.py
+INTERVIEW-GUIDE.md
+IMPROVEMENT-PLAN.md
+
+# Python caches and local environments
+**/__pycache__/
+**/*.py[cod]
+python/.pytest_cache/
+.venv/
+venv/
+env/
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

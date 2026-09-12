@@ -1,0 +1,29 @@
+[
+  {
+    "id": "employee-table-factoid",
+    "question": "张三在哪里工作？",
+    "required_answer_terms": ["张三", "腾讯"],
+    "required_sources": ["员工名录.csv"],
+    "required_citations": ["员工名录.csv"],
+    "expected_intent": "factoid",
+    "min_confidence": 0.9
+  },
+  {
+    "id": "entity-graph-relation",
+    "question": "张三和腾讯有什么关系？",
+    "required_answer_terms": ["张三", "腾讯", "员工"],
+    "required_sources": ["knowledge_graph"],
+    "required_citations": ["knowledge_graph"],
+    "expected_intent": "factoid",
+    "min_confidence": 0.85
+  },
+  {
+    "id": "procedure-vector",
+    "question": "如何提交报销申请？",
+    "required_answer_terms": ["报销", "审批"],
+    "required_sources": ["expense-policy.md"],
+    "required_citations": ["expense-policy.md"],
+    "expected_intent": "procedural",
+    "min_confidence": 0.88
+  }
+]
